@@ -87,8 +87,8 @@ Lead Router uses a **hard-coded configuration-based mapping system** to assign p
 
 Custom menu:
 Lead Router 2.5
-├── Run Routing
-└── Reset Output
+ - Run Routing
+ - Reset Output
 
 
 - Phone column selection prompt
@@ -126,7 +126,7 @@ Extensions → Apps Script
 ### Step 3: Add Code
 
 Copy and paste the contents of:
-LeadRouter_v2.5.gs
+lead-router.gs
 
 Save the project.
 
@@ -223,9 +223,8 @@ The system displays a summary after execution.
 
 Inside the script:
 
-```javascript
 const TIMEZONE_CONFIG = {
-  ET: { areaCodes: ["203", "207", "212", "999"] }
+  ET: { areaCodes: ["203", "207", "212"] }
 };
 
 
@@ -233,10 +232,7 @@ const TIMEZONE_CONFIG = {
 const VERSION = "2.5";
 Increment before saving changes.
 
-🔄 Apply Changes
-Save script
-Refresh Google Sheet
-Run updated routing
+🔄 Apply Changes: Save script -> Refresh Google Sheet -> Run updated routing
 
 🧪 Engineering Approach
 - Built using an iterative, test-driven workflow:
