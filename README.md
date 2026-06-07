@@ -225,10 +225,11 @@ Inside the script:
 
 ```javascript
 const TIMEZONE_CONFIG = {
-Example:
-ET: { areaCodes: ["203", "207", "212", "999"] }
+  ET: { areaCodes: ["203", "207", "212", "999"] }
+};
 
-🔄 Version Control
+
+📌 Version Control
 const VERSION = "2.5";
 Increment before saving changes.
 
