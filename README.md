@@ -1,36 +1,50 @@
 # 📞 Lead Router
 
-A Google Apps Script-based lead routing system that automatically **segregates spreadsheet-based lead lists into US & Canada time-zone-specific calling sheets using phone number area codes**.
+A Google Apps Script-based ETL system that transforms raw lead spreadsheets into **timezone-segmented, call-ready datasets using phone number area codes**.
+
+---
+
+## ⚡ One-Line Summary
+
+Automatically converts unstructured lead lists in Google Sheets into structured, region-specific outbound calling sheets in seconds.
 
 ---
 
 ## 🚀 Overview
 
-Lead Router is designed for sales teams working with large volumes of **North American phone-based lead data stored in Google Sheets**.
+Lead Router is designed for sales teams handling large volumes of North American phone-based lead data in Google Sheets.
 
-### 🎯 Core Purpose
-
-Transform a single raw spreadsheet into structured, time-zone-specific calling lists based on phone number area codes.
-
-This enables faster, more organized outbound calling workflows without manual segmentation.
+It automates the manual process of sorting and organizing leads by geographic calling regions using deterministic area-code mapping.
 
 ---
 
-## ⚙️ What It Does
+## 🎯 Core Problem
 
-Lead Router converts unstructured lead data into structured outbound calling lists by:
+Sales teams typically face:
 
-- Cleaning and normalizing phone numbers into a dialer-friendly format  
-- Extracting area codes from phone numbers  
-- Mapping leads to North American time zones  
-- Automatically splitting data into separate sheets per region  
-- Isolating toll-free, invalid, and international numbers  
+- Manual segmentation of large lead lists
+- Time-consuming timezone filtering
+- High risk of human sorting errors
+- Inefficient outbound calling workflows
+
+Lead Router eliminates this by fully automating segmentation inside Google Sheets.
+
+---
+
+## ⚙️ What the System Does
+
+- Normalizes and cleans phone numbers
+- Extracts area codes from raw inputs
+- Maps numbers to North American time zones
+- Separates leads into region-based sheets
+- Isolates invalid, toll-free, and unmapped numbers
+- Preserves original dataset structure
 
 ---
 
 ## 📊 Output Structure
 
-The system generates the following sheets automatically:
+The system generates the following sheets:
 
 - 🇺🇸 ET (Eastern Time)
 - 🇺🇸 CT (Central Time)
@@ -41,251 +55,191 @@ The system generates the following sheets automatically:
 - ☎️ TOLL_FREE
 - ❌ ERRORS
 
-Each output sheet contains:
+Each row includes:
 
-- Original lead data  
-- Cleaned phone number  
-- Extracted extension (if any)  
-- Assigned time zone  
-
----
-
-## 🧠 Key Features
-
-### 📞 Phone Processing Engine
-
-- Removes formatting noise (spaces, symbols, country codes)
-- Extracts extensions (`ext`, `x`, `extension`)
-- Normalizes numbers into 10-digit format
+- Original lead data
+- Cleaned phone number
+- Extracted extension (if any)
+- Assigned timezone
 
 ---
 
-### 🧭 Rule-Based Area Code Routing
+## 🧠 System Architecture
 
-Lead Router uses a **hard-coded configuration-based mapping system** to assign phone numbers to time zones.
+### ETL Pipeline Flow
 
-- Area codes are explicitly defined in the `TIMEZONE_CONFIG` object  
-- Each time zone bucket contains predefined 3-digit area codes  
-- Toll-free numbers are identified using static prefixes (800, 833, 844, 855, 866, 877, 888)
-
-#### ⚙️ Routing Logic
-
-- Extract first 3 digits (area code)
-- Match against predefined arrays
-- Assign corresponding time zone bucket
+RAW_INPUT → Column Detection → Phone Normalization → Validation → Area Code Extraction → Timezone Mapping → Bucket Routing → Sheet Generation
 
 ---
 
-### 📊 Automated Sheet Generation
+## 🧩 Core Components
 
-- Creates or refreshes output sheets dynamically
-- Preserves structured outbound calling lists
-
----
-
-### 🧾 Interactive Google Sheets UI
-
-Custom menu:
-Lead Router 2.5
- - Run Routing
- - Reset Output
-
-
-- Phone column selection prompt
-- Processing summary dashboard
-- Safe reset confirmation
+### UI Layer
+- Adds custom Google Sheets menu
+- Provides execution controls
+  - Run Routing
+  - Reset Output
 
 ---
 
-## 🔐 Data Security & Integrity
-
-Lead Router is fully **non-destructive by design**.
-
-- The original dataset remains fully intact in the `RAW_INPUT` sheet  
-- The original dataset is also preserved in all output sheets  
-- No source data is modified or deleted  
-- The tool only appends computed routing fields  
-- Existing business data, notes, and call logs remain untouched  
+### Orchestrator Engine
+- Central controller (`runRouting`)
+- Manages full ETL workflow
+- Handles bucket initialization
+- Triggers output generation
 
 ---
 
-## 🛠️ Installation & Setup
-
-### Step 1: Create a Google Sheet
-
-Create a new spreadsheet.
-
----
-
-### Step 2: Open Apps Script
-
-Navigate to:
-Extensions → Apps Script
----
-
-### Step 3: Add Code
-
-Copy and paste the contents of:
-lead-router.gs
-
-Save the project.
+### Data Processing Engine
+- Phone cleaning and normalization
+- Extension extraction
+- Validation (10-digit enforcement)
+- Area code extraction
 
 ---
 
-### Step 4: Authorize Script
-
-Run `onOpen()` once and approve permissions.
-
----
-
-### Step 5: Refresh Sheet
-
-Reload spreadsheet to activate menu:
-Lead Router 2.5
-
+### Routing Engine
+- Maps area codes to predefined time zones
+- Handles toll-free detection
+- Routes records into buckets
 
 ---
 
-## ▶️ How to Use
-
-### Step 1: Prepare Input Sheet
-
-Create a sheet named:
-RAW_INPUT
+### Output Engine
+- Writes processed data into separate sheets
+- Clears and refreshes outputs on each run
+- Maintains consistent schema across all buckets
 
 ---
 
-## 📊 Raw Input Sheet
+## 📥 Input Requirements
 
-![Raw Input Sheet](screenshots/01_raw_input.png)
+- Google Sheet named: `RAW_INPUT`
+- Must contain at least one phone-like column
 
----
-
-### Step 2: Add Leads
-
-Example:
-
-| Company | Contact | Phone |
-|--------|--------|------|
-| ABC Inc | John Doe | (212) 555-1234 |
+Supported formats:
+- (212) 555-1234
+- 212-555-1234
+- +1 212 555 1234
 
 ---
 
-### Step 3: Run Routing
+## 🧮 Data Processing Logic
 
-Select the correct phone column when prompted.
-
----
-
-## 🧭 Lead Router Menu
-
-![Lead Router Menu](screenshots/02_menu.png)
-
----
-
-## 📞 Phone Column Selection
-
-![Phone Column Selection](screenshots/03_phone_selection.png)
+1. Detect phone column automatically
+2. User selects correct column (if multiple detected)
+3. Normalize phone numbers
+4. Remove formatting noise and extensions
+5. Validate 10-digit structure
+6. Extract area code
+7. Map to timezone bucket
+8. Write to output sheets
 
 ---
 
-### Step 4: Processing Summary
+## 🧾 Error Handling
 
-The system displays a summary after execution.
+Invalid or unmapped records are routed to `ERRORS` sheet.
 
----
-
-## 📊 Processing Summary
-
-![Processing Summary](screenshots/04_summary.png)
-
----
-
-### Step 5: Review Output Sheets
+Tracked error types:
+- Blank numbers
+- Invalid format
+- Invalid structure
+- Unmapped area codes
 
 ---
 
-## 📊 ET Output Sheet
+## 📈 Performance Profile
 
-![ET Output Sheet](screenshots/05_et_output.png)
+- Complexity: **O(n)** linear processing
+- Observed performance:
+  - ~11,000 records processed in ~25 seconds
+- Optimized via:
+  - In-memory processing
+  - Batch sheet writes
+  - Minimal spreadsheet I/O
 
 ---
 
-## ❌ Error Sheet
+## 🔐 Data Safety
 
-![Error Sheet](screenshots/06_error_sheet.png)
+- No external APIs
+- No data transmission outside Google Sheets
+- Original dataset remains unchanged
+- All transformations are non-destructive
 
 ---
 
-## 🛠️ Customization
+## 🛠️ Tech Stack
 
-### ➕ Add Area Codes
-
-Inside the script:
-
-const TIMEZONE_CONFIG = {
-  ET: { areaCodes: ["203", "207", "212"] }
-};
-
-
-📌 Version Control
-const VERSION = "2.5";
-Increment before saving changes.
-
-🔄 Apply Changes: Save script -> Refresh Google Sheet -> Run updated routing
-
-🧪 Engineering Approach
-- Built using an iterative, test-driven workflow:
-- Problem definition from real sales operations
-- Spreadsheet-native system design
-- Incremental Google Apps Script implementation
-- Validation using synthetic datasets
-- Edge-case testing and refinement
-
-🤖 AI-Assisted Development Disclosure
-This project was developed using an AI-assisted engineering workflow.
-
-ChatGPT was used for:
-- Code scaffolding and function design
-- Logic optimization and routing/validation refactoring
-- Error handling improvements in Google Apps Script
-- Debugging and code standardization
-- Accelerating MVP iteration cycles
-
-Gemini was used for:
-- Generating synthetic lead datasets for UAT and validation testing
-
-All business requirements, system design decisions, validation logic, and final implementation ownership remain fully defined and controlled by the author.
-
-📈 Why This Tool Exists
-Sales teams continue to rely heavily on spreadsheets for managing leads.
-Manual segmentation of large datasets into time-zone-specific calling lists is:
-- Time-consuming
-- Error-prone
-- Operationally inefficient
-- Lead Router automates this workflow entirely within Google Sheets.
-
-📌 Tech Stack
 - Google Apps Script
 - JavaScript (ES5/ES6)
 - Google Sheets API (native)
 - Spreadsheet UI Service
 
-🚀 Future Improvements
+---
+
+## 🔄 Platform Compatibility
+
+Lead Router is built specifically for Google Sheets using Google Apps Script and is not directly compatible with Microsoft Excel.
+
+The system relies on Google-native services such as SpreadsheetApp, UI menus, and container-bound scripting, which do not exist in Excel environments.
+
+However, the core logic (data cleaning, validation, and routing) is platform-agnostic and can be adapted to Excel using VBA or Office Scripts with minimal architectural changes.
+
+---
+
+## 🧱 System Limitations
+
+- Scoped to North American Numbering Plan (NANP) phone data only  
+- Relies on deterministic area-code mapping rather than geolocation-based resolution  
+- No de-duplication, as duplicates may represent valid shared business or organizational numbers
+- Does not perform carrier or line-type classification  
+- No native CRM or dialer integrations; system is optimized for spreadsheet-native execution
+- Built for Google Sheets using Apps Script and is not directly compatible with Microsoft Excel without refactoring to VBA or Office Scripts
+
+---
+
+## 🔮 Future Improvements
+
 - CRM integrations (HubSpot / Salesforce)
-- Duplicate detection system
+- Duplicate detection layer
 - Do Not Call (DNC) filtering
 - International number support
-- Performance optimization for large datasets
 - Dashboard UI inside Sheets
+- Performance scaling for large datasets
 
-📄 License
-This project is licensed under the MIT License.
+---
 
-🙏 Acknowledgements
-Built with an AI-assisted development workflow using ChatGPT and Gemini to accelerate development, testing, and refinement.
+## 🧪 Engineering Approach
 
+- Built iteratively using real-world sales workflows
+- Designed as a lightweight ETL system inside Google Sheets
+- Tested using synthetic and real lead datasets
+- Optimized for speed, simplicity, and reliability
 
+---
 
+## 📌 Version
 
+Current Version: v2.5
 
+---
+
+## 👤 Author Notes
+
+This project was built using an AI-assisted development workflow.
+
+AI tools were used for:
+- Code scaffolding
+- Logic refinement
+- Debugging support
+- Test data generation
+
+All system design decisions and final implementation remain human-directed.
+
+---
+
+## 📌 Summary
+
+Lead Router is a lightweight ETL automation system that converts raw lead data into structured, timezone-segmented calling lists entirely within Google Sheets.
