@@ -1,4 +1,4 @@
-const VERSION = "2.5";
+const VERSION = "2.7";
 
 function onOpen() {
   SpreadsheetApp.getUi()
@@ -10,7 +10,7 @@ function onOpen() {
 
 /**
  * =========================
- * CONFIG
+ * TIMEZONE CONFIG
  * =========================
  */
 const TIMEZONE_CONFIG = {
@@ -30,7 +30,7 @@ const TIMEZONE_CONFIG = {
 
 /**
  * =========================
- * MAIN
+ * MAIN ROUTING
  * =========================
  */
 function runRouting() {
@@ -58,135 +58,188 @@ function runRouting() {
     return;
   }
 
-  const phoneIndex = askUserToChooseColumn(phoneColumns);
+  const selection = askUserToChooseMode(phoneColumns);
 
-if (phoneIndex === null) {
-  SpreadsheetApp.getUi().alert("Routing cancelled.");
-  return;
-}
-
-let selectedPhoneColumnName = "Phone";
-
-for (let i = 0; i < phoneColumns.length; i++) {
-  if (phoneColumns[i].index === phoneIndex) {
-    selectedPhoneColumnName = phoneColumns[i].name;
-    break;
+  if (!selection) {
+    SpreadsheetApp.getUi().alert("Routing cancelled.");
+    return;
   }
-}
 
-  const buckets = {
-    ET: [], CT: [], MT: [], PT: [],
-    AK: [], HI: [],
-    TOLL_FREE: [],
-    ERRORS: []
-  };
+  const isAllMode = selection === "ALL";
+  const selectedColumns = isAllMode
+    ? phoneColumns
+    : [phoneColumns.find(c => c.index === selection)];
 
-  const summary = {
-    total: 0,
-    ET: 0,
-    CT: 0,
-    MT: 0,
-    PT: 0,
-    AK: 0,
-    HI: 0,
-    TOLL_FREE: 0,
-    ERRORS: 0
-  };
+  const columnSummaries = {};
 
-  rows.forEach(row => {
-    summary.total++;
+  selectedColumns.forEach(col => {
 
-    const safeRow = normalizeRow(row, headers.length);
-    const rawPhone = String(safeRow[phoneIndex] || "").trim();
+    const buckets = {
+      ET: [], CT: [], MT: [], PT: [],
+      AK: [], HI: [], TOLL_FREE: [], ERRORS: []
+    };
 
-    const ext = extractExtension(rawPhone);
-    const cleanedPhone = cleanPhone(rawPhone);
+    const summary = {
+      total: rows.length,
+      ET: 0, CT: 0, MT: 0, PT: 0,
+      AK: 0, HI: 0, TOLL_FREE: 0, ERRORS: 0
+    };
 
-    const validation = validatePhone(cleanedPhone);
+    rows.forEach(row => {
 
-    if (!validation.valid) {
-      buckets.ERRORS.push([...safeRow, cleanedPhone, ext, validation.reason]);
-      summary.ERRORS++;
-      return;
-    }
+      const safeRow = normalizeRow(row, headers.length);
+      const rawPhone = String(safeRow[col.index] || "").trim();
 
-    const areaCode = extractAreaCode(cleanedPhone);
+      const ext = extractExtension(rawPhone);
+      const cleanedPhone = cleanPhone(rawPhone);
 
-    if (areaCode === "INVALID") {
-      buckets.ERRORS.push([...safeRow, cleanedPhone, ext, "INVALID_AREA_CODE_STRUCTURE"]);
-      summary.ERRORS++;
-      return;
-    }
+      const validation = validatePhone(cleanedPhone);
 
-    const zone = getTimeZone(areaCode);
+      // ✅ RESTORED v2.6 ERROR HANDLING
+      if (!validation.valid) {
+        buckets.ERRORS.push([
+          ...safeRow,
+          cleanedPhone,
+          ext,
+          validation.reason
+        ]);
+        summary.ERRORS++;
+        return;
+      }
 
-    if (zone === "ERROR") {
-      buckets.ERRORS.push([...safeRow, cleanedPhone, ext, "UNMAPPED_AREA_CODE"]);
-      summary.ERRORS++;
-      return;
-    }
+      const areaCode = extractAreaCode(cleanedPhone);
 
-    buckets[zone].push([
-      ...safeRow,
-      cleanedPhone,
-      ext,
-      zone
-    ]);
+      if (areaCode === "INVALID") {
+        buckets.ERRORS.push([
+          ...safeRow,
+          cleanedPhone,
+          ext,
+          "INVALID_AREA_CODE_STRUCTURE"
+        ]);
+        summary.ERRORS++;
+        return;
+      }
 
-    summary[zone]++;
+      const zone = getTimeZone(areaCode);
+
+      if (zone === "ERROR") {
+        buckets.ERRORS.push([
+          ...safeRow,
+          cleanedPhone,
+          ext,
+          "UNMAPPED_AREA_CODE"
+        ]);
+        summary.ERRORS++;
+        return;
+      }
+
+      buckets[zone].push([
+        ...safeRow,
+        cleanedPhone,
+        ext,
+        zone
+      ]);
+
+      summary[zone]++;
+    });
+
+    writeOutput(ss, headers, buckets, col.name);
+    columnSummaries[col.name] = summary;
   });
 
-  writeOutput(ss, headers, buckets, selectedPhoneColumnName);
-
-  // =========================
-  // PROCESSING SUMMARY POPUP
-  // =========================
-  const summaryMessage =
-    `📊 Processing Summary (v${VERSION})\n\n` +
-    `Routing Complete\n\n` +
-    `Processed: ${summary.total}\n\n` +
-    `ET: ${summary.ET}\n` +
-    `CT: ${summary.CT}\n` +
-    `MT: ${summary.MT}\n` +
-    `PT: ${summary.PT}\n` +
-    `AK: ${summary.AK}\n` +
-    `HI: ${summary.HI}\n\n` +
-    `TOLL_FREE: ${summary.TOLL_FREE}\n\n` +
-    `ERRORS: ${summary.ERRORS}`;
-
-  SpreadsheetApp.getUi().alert(summaryMessage);
+  showSummary(columnSummaries);
 }
 
 /**
  * =========================
- * PHONE CLEANING
+ * MODE SELECTION
  * =========================
  */
+function askUserToChooseMode(columns) {
+  const ui = SpreadsheetApp.getUi();
+
+  let msg =
+    "Enter '0' to PROCESS ALL COLUMNS\n\n" +
+    "Or pick one column from below:\n\n";
+
+  columns.forEach((c, i) => {
+    msg += `${i + 1}. ${c.name}\n`;
+  });
+
+  const response = ui.prompt(
+    "Lead Router Mode Selection",
+    msg,
+    ui.ButtonSet.OK_CANCEL
+  );
+
+  if (response.getSelectedButton() === ui.Button.CANCEL) {
+    return null;
+  }
+
+  const choice = parseInt(response.getResponseText(), 10);
+
+  if (isNaN(choice)) return null;
+
+  if (choice === 0) return "ALL";
+
+  const index = choice - 1;
+
+  if (index < 0 || index >= columns.length) return null;
+
+  return columns[index].index;
+}
+
+/**
+ * =========================
+ * COLUMN DETECTION
+ * =========================
+ */
+function detectPhoneColumns(headers) {
+
+  const strongSignals = ["phone","mobile","cell","contact","number"];
+  const exclude = ["address","city","state","zip","postal","country"];
+
+  return headers.map((h, i) => {
+    const s = h.toLowerCase().replace(/[_-]/g, " ").trim();
+
+    if (exclude.some(e => s.includes(e))) return null;
+
+    const hasSignal = strongSignals.some(k => s.includes(k));
+    const hasLine = /\bline\b/.test(s);
+
+    if (hasSignal || hasLine) {
+      return { name: h, index: i };
+    }
+
+    return null;
+  }).filter(Boolean);
+}
+
+/**
+ * =========================
+ * PHONE HELPERS
+ * =========================
+ */
+function normalizeRow(row, length) {
+  const safe = [];
+  for (let i = 0; i < length; i++) {
+    safe.push(row[i] !== undefined ? row[i] : "");
+  }
+  return safe;
+}
+
 function extractExtension(phone) {
-  if (!phone) return "";
-  const match = phone.toString().match(/(?:ext\.?|extension|x)\s*[:\-\.]?\s*(\d+)/i);
+  const match = phone.toString().match(/(?:ext\.?|x)\s*[:\-\.]?\s*(\d+)/i);
   return match ? match[1] : "";
 }
 
 function cleanPhone(phone) {
-  if (!phone) return "";
-
-  let cleaned = phone.toString();
-  cleaned = cleaned.replace(/(?:ext\.?|extension|x)\s*[:\-\.]?\s*\d+/gi, "");
+  let cleaned = phone.toString().replace(/(?:ext\.?|x)\s*[:\-\.]?\s*\d+/gi, "");
   cleaned = cleaned.replace(/\D/g, "");
-
-  if (cleaned.length === 11 && cleaned.startsWith("1")) {
-    cleaned = cleaned.substring(1);
-  }
-
+  if (cleaned.length === 11 && cleaned.startsWith("1")) cleaned = cleaned.slice(1);
   return cleaned;
 }
 
-/**
- * =========================
- * VALIDATION
- * =========================
- */
 function validatePhone(phone) {
   if (!phone || phone.trim().length === 0) {
     return { valid: false, reason: "BLANK_PHONE" };
@@ -199,14 +252,8 @@ function validatePhone(phone) {
   return { valid: true };
 }
 
-/**
- * =========================
- * AREA CODE
- * =========================
- */
 function extractAreaCode(phone) {
-  if (!phone || phone.length !== 10) return "INVALID";
-  return phone.substring(0, 3);
+  return phone.length === 10 ? phone.substring(0, 3) : "INVALID";
 }
 
 /**
@@ -215,16 +262,11 @@ function extractAreaCode(phone) {
  * =========================
  */
 function getTimeZone(areaCode) {
-  if (TIMEZONE_CONFIG.TOLL_FREE.areaCodes.includes(areaCode)) {
-    return "TOLL_FREE";
-  }
+  if (TIMEZONE_CONFIG.TOLL_FREE.areaCodes.includes(areaCode)) return "TOLL_FREE";
 
-  for (const zone in TIMEZONE_CONFIG) {
+  for (let zone in TIMEZONE_CONFIG) {
     if (zone === "TOLL_FREE") continue;
-
-    if (TIMEZONE_CONFIG[zone].areaCodes.includes(areaCode)) {
-      return zone;
-    }
+    if (TIMEZONE_CONFIG[zone].areaCodes.includes(areaCode)) return zone;
   }
 
   return "ERROR";
@@ -232,108 +274,31 @@ function getTimeZone(areaCode) {
 
 /**
  * =========================
- * COLUMN DETECTION
- * =========================
- */
-function detectPhoneColumns(headers) {
-  const keywords = [
-    "phone", "mobile", "cell", "cellular",
-    "direct", "hq", "contact", "number",
-    "line", "work", "business", "office"
-  ];
-
-  return headers
-    .map((h, i) => {
-      const lower = h.toLowerCase();
-      const score = keywords.reduce((acc, k) => lower.includes(k) ? acc + 1 : acc, 0);
-      return score > 0 ? { name: h, index: i, score } : null;
-    })
-    .filter(Boolean)
-    .sort((a, b) => b.score - a.score);
-}
-
-/**
- * =========================
- * USER COLUMN PICK
- * =========================
- */
-function askUserToChooseColumn(columns) {
-  const ui = SpreadsheetApp.getUi();
-
-  let msg = "Select the phone number column to use:\n\n";
-
-  columns.forEach((c, i) => {
-    msg += `${i + 1}. ${c.name}\n`;
-  });
-
-  const response = ui.prompt(
-    "Phone Column Selection",
-    msg + "\nEnter number or click Cancel to stop execution.",
-    ui.ButtonSet.OK_CANCEL
-  );
-
-  if (response.getSelectedButton() === ui.Button.CANCEL) {
-    return null;
-  }
-
-  const choice = parseInt(response.getResponseText(), 10) - 1;
-
-  if (isNaN(choice) || choice < 0 || choice >= columns.length) {
-    ui.alert("Invalid selection. Script stopped.");
-    return null;
-  }
-
-  return columns[choice].index;
-}
-
-/**
- * =========================
- * SAFE ROW
- * =========================
- */
-function normalizeRow(row, length) {
-  const safe = [];
-  for (let i = 0; i < length; i++) {
-    safe.push(row[i] !== undefined ? row[i] : "");
-  }
-  return safe;
-}
-
-/**
- * =========================
  * OUTPUT
  * =========================
  */
-function writeOutput(ss, headers, buckets, selectedPhoneColumnName) {
+function writeOutput(ss, headers, buckets, columnName) {
 
-  // SAFETY: Ensure headers is always a valid array
-  const safeHeaders = Array.isArray(headers)
-    ? headers.map(h => String(h).trim())
-    : [];
+  const safeHeaders = Array.isArray(headers) ? headers : [];
 
   const outputHeaders = [
     ...safeHeaders,
-    `Phone Used - ${selectedPhoneColumnName}`,
-    "Ext (if any)",
-    "Time Zone"
+    `Phone Used - ${columnName}`,
+    "Ext",
+    "Zone"
   ];
 
   Object.keys(buckets).forEach(zone => {
 
-    let sheet = ss.getSheetByName(zone);
+    const sheetName = `${zone} [${columnName}]`;
+    let sheet = ss.getSheetByName(sheetName);
 
-    if (!sheet) {
-      sheet = ss.insertSheet(zone);
-    } else {
-      sheet.clear();
-    }
+    if (!sheet) sheet = ss.insertSheet(sheetName);
+    else sheet.clear();
 
-    // Write header row
-    sheet.getRange(1, 1, 1, outputHeaders.length)
-      .setValues([outputHeaders]);
+    sheet.getRange(1, 1, 1, outputHeaders.length).setValues([outputHeaders]);
 
-    // Write data rows if any exist
-    if (buckets[zone] && buckets[zone].length > 0) {
+    if (buckets[zone].length > 0) {
       sheet.getRange(2, 1, buckets[zone].length, outputHeaders.length)
         .setValues(buckets[zone]);
     }
@@ -342,47 +307,76 @@ function writeOutput(ss, headers, buckets, selectedPhoneColumnName) {
 
 /**
  * =========================
- * RESET
+ * SUMMARY
+ * =========================
+ */
+function showSummary(columnSummaries) {
+  const ui = SpreadsheetApp.getUi();
+
+  let msg = `📊 Processing Summary (v${VERSION})\n\n`;
+
+  let total = 0;
+
+  for (let col in columnSummaries) {
+    const s = columnSummaries[col];
+    total += s.total;
+
+    msg += `Column - ${col}\n`;
+    msg += `Records Processed: ${s.total}\n`;
+    msg += `ET: ${s.ET} | CT: ${s.CT} | MT: ${s.MT} | PT: ${s.PT}\n`;
+    msg += `AK: ${s.AK} | HI: ${s.HI} | TOLL_FREE: ${s.TOLL_FREE}\n`;
+    msg += `ERRORS: ${s.ERRORS}\n\n`;
+  }
+
+  msg = `Total Processed: ${total}\n\n` + msg;
+
+  ui.alert(msg);
+}
+
+/**
+ * =========================
+ * RESET OUTPUT (SAFE)
  * =========================
  */
 function resetOutput() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const ui = SpreadsheetApp.getUi();
 
-  const zones = ["ET","CT","MT","PT","AK","HI","TOLL_FREE","ERRORS"];
+  const sheets = ss.getSheets();
 
-  // Check if any output sheets exist
-  const existingSheets = zones.filter(name => ss.getSheetByName(name));
+  const toDelete = sheets
+    .map(s => s.getName())
+    .filter(name =>
+      /^(ET|CT|MT|PT|AK|HI|TOLL_FREE|ERRORS)(\s[\(\[].+[\)\]])?$/.test(name)
+    );
 
-  if (existingSheets.length === 0) {
-    ui.alert("No Output Sheet found, nothing to reset!");
+  if (toDelete.length === 0) {
+    ui.alert("No Lead Router sheets found.");
     return;
   }
+
+  const preview =
+    "The following Lead Router sheets will be deleted:\n\n" +
+    toDelete.join("\n") +
+    `\n\nTotal: ${toDelete.length}`;
 
   const response = ui.alert(
     "Confirm Reset Output",
-    "This will delete all generated routing output sheets.\n\nDo you want to continue?",
+    preview + "\n\nProceed?",
     ui.ButtonSet.OK_CANCEL
   );
 
-  // User clicked Cancel
   if (response !== ui.Button.OK) {
-    ui.alert("Reset cancelled. No changes were made.");
+    ui.alert("Reset cancelled.");
     return;
   }
 
-  // Delete output sheets
-  existingSheets.forEach(name => {
+  toDelete.forEach(name => {
     const sheet = ss.getSheetByName(name);
-
-    if (sheet) {
-      if (ss.getSheets().length > 1) {
-        ss.deleteSheet(sheet);
-      } else {
-        sheet.clear();
-      }
+    if (sheet && ss.getSheets().length > 1) {
+      ss.deleteSheet(sheet);
     }
   });
 
-  ui.alert("Output reset successfully.");
+  ui.alert("Lead Router reset complete.");
 }
